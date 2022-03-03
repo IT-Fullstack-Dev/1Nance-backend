@@ -1,5 +1,7 @@
 pragma solidity ^0.8.4;
 
+// import "openzeppelin-contracts/";
+
 library SafeMath {
 
 	function add(uint256 a, uint256 b) internal pure returns (uint256) {
@@ -92,9 +94,26 @@ library SafeMath {
 	}
 }
 
+contract Ownable{
+	address internal _owner;
+
+	constructor() {
+		_owner = msg.sender;
+	}
+
+	function owner() public view returns(address) {
+		return _owner;
+	}
+
+	modifier onlyOwner() {
+		require(msg.sender == _owner, "The caller is not owner.");
+		_;
+	}
+}
+
 interface Token {
 	function transfer(address _to, uint256 _value) external returns (bool);
-	function balanceOf(address_ owner) external constant returns (uint256 balance);
+	function balanceOf(address _owner) external returns (uint256 balance);
 }
 
 contract NBICO is Ownable {
@@ -106,8 +125,10 @@ contract NBICO is Ownable {
 	uint256 public constant initial_token_count = 1000_000 * 10**18;
 
 	uint256 public constant Rate_1 = 2700;
-	uint256 public constant Rate_1 = 2500;
-	uint256 public constant Rate_1 = 2300;
+	uint256 public constant Rate_2 = 2500;
+	uint256 public constant Rate_3 = 2300;
+
+	uint256 public constant CAP = 5000;
 
 	uint256 public constant START_1 = 1656604800; //2022-07-01-00:00:00 GMT+8 time
 	uint256 public constant START_2 = 1657209600; //2022-07-08-00:00:00 GMT+8 time
@@ -124,22 +145,22 @@ contract NBICO is Ownable {
 		_;
 	}
 
-	constructor NBICO(address _tokenAddr){
-		require(_tokenAddr != 0);
+	constructor(address _tokenAddr){
+		require(_tokenAddr != address(0));
 		token = Token(_tokenAddr);
 	}
 
 	function initialize() public onlyOwner {
 		require(initialized == false); // Can only be initialized once
-		require(tokensAvailable() == initialTokens); // Must have enough tokens allocated
+		require(tokensAvailable() == initial_token_count); // Must have enough tokens allocated
 		initialized = true;
 	}
 
 	function isActive() public view returns (bool) {
 		return (
 			initialized == true &&
-			now >= START && // Must be after the START date
-			now <= START.add(DAYS * 1 days) && // Must be before the end date
+			block.timestamp >= START_1 && // Must be after the START date
+			block.timestamp <= START_4 && // Must be before the end date
 			goalReached() == false // Goal must not already be reached
 		);
 	}
@@ -151,7 +172,7 @@ contract NBICO is Ownable {
 	/**
 	 * @dev Fallback function if ether is sent to address insted of buyTokens function
 	 **/
-	function () public payable {
+	fallback () external payable {
 		buyTokens();
 	}
 
@@ -161,21 +182,21 @@ contract NBICO is Ownable {
 	 **/
 	function buyTokens() public payable whenSaleIsActive {
 		uint256 weiAmount = msg.value; // Calculate tokens to sell
-		uint256 tokens = weiAmount.mul(RATE);
+		uint256 tokens = weiAmount.mul(Rate_1);
 		
 		emit BoughtTokens(msg.sender, tokens); // log event onto the blockchain
-		raisedAmount = raisedAmount.add(msg.value); // Increment raised amount
+		raisedAmount = raisedAmount + msg.value; // Increment raised amount
 		token.transfer(msg.sender, tokens); // Send tokens to buyer
 		
-		owner.transfer(msg.value);// Send money to owner
+		// token.transfer(msg.value);// Send money to owner
 	}
 
 	/**
 	 * tokensAvailable
 	 * @dev returns the number of tokens allocated to this contract
 	 **/
-	function tokensAvailable() public constant returns (uint256) {
-		return token.balanceOf(this);
+	function tokensAvailable() public returns (uint256) {
+		return token.balanceOf(address(this));
 	}
 
 	/**
@@ -184,11 +205,11 @@ contract NBICO is Ownable {
 	 **/
 	function destroy() onlyOwner public {
 		// Transfer tokens back to owner
-		uint256 balance = token.balanceOf(this);
+		uint256 balance = token.balanceOf(address(this));
 		assert(balance > 0);
-		token.transfer(owner, balance);
+		token.transfer(address(_owner), balance);
 		// There should be no ether in the contract but just in case
-		selfdestruct(owner);
+		// selfdestruct(address(_owner));
 	}
 
 }
